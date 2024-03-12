@@ -33,6 +33,20 @@ const sharp = require('sharp');
 const inspector = require('inspector');
 const yargs = require('yargs');
 
+const packageJson = require('./package.json'); // Change the path if necessary
+
+//
+// Constants
+//
+
+// -----------------------------------------------------------------------------
+const PROGRAM_NAME            = "simple-sprite-sheet";
+const PROGRAM_VERSION         = packageJson.version;
+const PROGRAM_AUTHOR_FULL     = "mateus.digital <hello@mateus.digital>";
+const PROGRAM_AUTHOR_SHORT    = "mateus.digital";
+const PROGRAM_COPYRIGHT_YEARS = "2024";
+const PROGRAM_WEBSITE         = "https://mateus.digital";
+
 
 //
 // Globals
@@ -72,12 +86,13 @@ if (isInDebugMode()) {
 //------------------------------------------------------------------------------
 function handleCommandLineOptions() {
   const options = yargs
-    .usage('Usage: $0 --input-path [inputPath] --output-path [outputPath]')
+    .usage(`Usage: ${PROGRAM_NAME} --input-path [inputPath] --output-path [outputPath]`)
     .option('help', {
       describe: 'Show this screen',
       type: 'boolean'
     }).alias('h', 'help')
 
+    .version(false)
     .option('version', {
       describe: 'Show version information',
       type: 'boolean'
@@ -86,7 +101,6 @@ function handleCommandLineOptions() {
     .option('input-path', {
       describe: 'Path to the images directory',
       type: 'string',
-      demandOption: true
     })
 
     .option('output-path', {
@@ -95,7 +109,7 @@ function handleCommandLineOptions() {
       default: './spriteSheet.png'
     })
 
-    .example('$0 --input-path images --output-path spriteSheet.png', '')
+    .example(`${PROGRAM_NAME} --input-path images --output-path spriteSheet.png`, '')
     .argv;
 
   //------------------------------------------------------------------------------
@@ -105,8 +119,18 @@ function handleCommandLineOptions() {
   }
 
   if (options.version) {
-    console.log(`Copyright information`);
+    console.log(`${PROGRAM_NAME} - ${PROGRAM_VERSION} - ${PROGRAM_AUTHOR_FULL}`);
+    console.log(`Copyright (c) ${PROGRAM_COPYRIGHT_YEARS} - ${PROGRAM_AUTHOR_SHORT}`);
+    console.log(`This is a free software (GPLv3) - Share/Hack it`);
+    console.log(`Check ${PROGRAM_WEBSITE} for more :)`);
+    console.log("");
     process.exit();
+  }
+
+  if(!options["input-path"]) {
+    console.error("Missing input path\n");
+    yargs.showHelp();
+    process.exit(1);
   }
 
   return {
