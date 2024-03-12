@@ -85,7 +85,7 @@ if (isInDebugMode()) {
 
 //------------------------------------------------------------------------------
 function handleCommandLineOptions() {
-  const options = yargs
+  const options = yargs(process.argv.slice(2))
     .usage(`Usage: ${PROGRAM_NAME} --input-path [inputPath] --output-path [outputPath]`)
     .option('help', {
       describe: 'Show this screen',
@@ -106,19 +106,18 @@ function handleCommandLineOptions() {
     .option('output-path', {
       describe: 'Path to the sprite sheet destination',
       type: 'string',
-      default: './spriteSheet.png'
     })
 
     .example(`${PROGRAM_NAME} --input-path images --output-path spriteSheet.png`, '')
-    .argv;
+
 
   //------------------------------------------------------------------------------
-  if (options.help) {
+  if (options.argv.help) {
     yargs.showHelp();
     process.exit();
   }
 
-  if (options.version) {
+  if (options.argv.version) {
     console.log(`${PROGRAM_NAME} - ${PROGRAM_VERSION} - ${PROGRAM_AUTHOR_FULL}`);
     console.log(`Copyright (c) ${PROGRAM_COPYRIGHT_YEARS} - ${PROGRAM_AUTHOR_SHORT}`);
     console.log(`This is a free software (GPLv3) - Share/Hack it`);
@@ -127,15 +126,22 @@ function handleCommandLineOptions() {
     process.exit();
   }
 
-  if(!options["input-path"]) {
-    console.error("Missing input path\n");
+  const inputPath  = options.argv["input-path"];
+  let   outputPath = options.argv["output-path"];
+
+  if(!inputPath) {
+    console.error("Missing input-path\n");
     yargs.showHelp();
     process.exit(1);
   }
 
+  if(!outputPath) {
+    outputPath = inputPath + ".png";
+  }
+
   return {
-    inputPath: options["input-path"],
-    outputPath: options["output-path"],
+    inputPath:  inputPath,
+    outputPath: outputPath
   }
 }
 
