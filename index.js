@@ -71,13 +71,15 @@ if (isInDebugMode()) {
   console.log('Debugger is attached.');
   Options = {
     inputPath: path.join(process.cwd(), "images"),
-    outputPath: path.join(process.cwd(), "spriteSheet.png")
+    outputPath: path.join(process.cwd(), "spriteSheet.png"),
+    trim: true,
+    crop: true
   }
 
 } else {
-  Options = handleCommandLineOptions();
 }
 
+Options = handleCommandLineOptions();
 
 //
 // Command line args
@@ -108,6 +110,17 @@ function handleCommandLineOptions() {
       type: 'string',
     })
 
+    .option('trim', {
+      describe: 'Trim the input images',
+      type: 'boolean'
+    })
+
+
+    .option('crop', {
+      describe: 'Crop the input images',
+      type: 'string'
+    })
+
     .example(`${PROGRAM_NAME} --input-path images --output-path spriteSheet.png`, '')
 
 
@@ -119,7 +132,7 @@ function handleCommandLineOptions() {
 
   if (options.argv.version) {
     console.log(`${PROGRAM_NAME} - ${PROGRAM_VERSION} - ${PROGRAM_AUTHOR_FULL}`);
-    console.log(`Copyright (c) ${PROGRAM_COPYRIGHT_YEARS} - ${PROGRAM_AUTHOR_SHORT}`);
+    console.log(`Copyrighdt (c) ${PROGRAM_COPYRIGHT_YEARS} - ${PROGRAM_AUTHOR_SHORT}`);
     console.log(`This is a free software (GPLv3) - Share/Hack it`);
     console.log(`Check ${PROGRAM_WEBSITE} for more :)`);
     console.log("");
@@ -141,7 +154,9 @@ function handleCommandLineOptions() {
 
   return {
     inputPath:  inputPath,
-    outputPath: outputPath
+    outputPath: outputPath,
+    trim:       options.argv.trim,
+    crop:       options.argv.crop,
   }
 }
 
@@ -157,6 +172,7 @@ fs.readdir(Options.inputPath, (err, files) => {
     process.exit(1);
   }
 
+  console.log("Reading input files:", Options.inputPath);
   const fullpaths = files
     .filter((filepath) => {
       return filepath.endsWith("png");
@@ -176,26 +192,157 @@ fs.readdir(Options.inputPath, (err, files) => {
 //
 //
 //
-
-// -----------------------------------------------------------------------------
-async function _createSpriteSheet(filenames) {
-
-  // Check if all images has the same size.
-  const baseMetadata = await sharp(filenames[0]).metadata();
+async function _loadImages(filenames)
+{
+  console.log("Loading...");
+  let images = [];
   for (let filename of filenames) {
-    const currMetadata = await sharp(filename).metadata();
-    if (currMetadata.width != baseMetadata.width ||
-      currMetadata.height != baseMetadata.height) {
-      console.error("Not all images are the same size - which is required now");
-      console.error("Offending image:", filename);
-      process.exit(1);
+    const image = await sharp(filename);
+    images.push(image);
+  }
+  return images;
+}
+
+//------------------------------------------------------------------------------
+async function _trimImages(images)
+{
+  console.log("Trimming...");
+  // Trim each input image
+  const trimmedImages = [];
+  // @XXX: not good, but trim + getting metadata isn't working correctly
+  // need to learn the lib a bit better, but now doing the crude way...
+  for (let image of images) {
+    const trimmedImageBuffer = await image.trim().toBuffer();
+    const trimmedImage       = await sharp(trimmedImageBuffer);
+    trimmedImages.push(trimmedImage);
+  }
+
+  return trimmedImages;
+}
+
+//------------------------------------------------------------------------------
+async function _cropImages(images, rect)
+{
+  console.log("Cropping...", rect);
+  // Crop each input image
+  const _cropImages = [];
+  // @XXX: not good, but crop + getting metadata isn't working correctly
+  // need to learn the lib a bit better, but now doing the crude way...
+
+  for (let image of images) {
+    const metadata = image.__metadata__;
+    console.log(metadata);
+    if(rect.width * rect.height > metadata.width * metadata.height) {
+      _cropImages.push(image.clone());
+    } else {
+      const croppedImageBuffer = await image.extract(rect).toBuffer();
+      const croppedImage       = await sharp(croppedImageBuffer);
+      _cropImages.push(croppedImage);
+    }
+
+  }
+
+  return _cropImages;
+}
+
+//------------------------------------------------------------------------------
+async function _loadAndSetMetadata(images)
+{
+  console.log("Loading metadata...");
+  for (let image of images) {
+    var meta = await image.metadata();
+    image.__metadata__ = meta;
+  }
+}
+
+//------------------------------------------------------------------------------
+async function _findBoundingRects(images)
+{
+  // Find the biggest bouding-rect all all images.
+  const smallestRect = { left: 0, top: 0, width: Infinity, height: Infinity };
+  const biggestRect  = { left: 0, top: 0, width: 0, height: 0 };
+
+
+  for (const image of images) {
+    const metadata = image.__metadata__;
+    // console.log("Current rect:", metadata.width, "", metadata.height);
+    if (biggestRect.width < metadata.width) {
+      biggestRect.width = metadata.width;
+    } else if (smallestRect.width > metadata.width) {
+      smallestRect.width = metadata.width;
+    }
+
+    if (biggestRect.height < metadata.height) {
+      biggestRect.height = metadata.height;
+    } else if (smallestRect.height > metadata.height) {
+      smallestRect.height = metadata.height;
     }
   }
 
+  return { smallestRect, biggestRect } ;
+}
+
+// -----------------------------------------------------------------------------
+async function _createSpriteSheet(filenames) {
+  let images = await _loadImages(filenames);
+
+  if(Options.trim) {
+    images = await _trimImages(images);
+  }
+
+  await _loadAndSetMetadata(images);
+  const {smallestRect, biggestRect} = await _findBoundingRects(images);
+
+  if(Options.crop)
+  {
+    const clean_option = Options.crop.toLowerCase().trim();
+
+    let rect = null;
+    if(clean_option == "smallest") {
+      rect = smallestRect;
+    } else if(clean_option == "biggest") {
+      rect = biggestRect;
+    } else {
+        const comp = clean_option.split(",");
+        if(comp.length == 4) {
+          const left   = parseInt(comp[0]);
+          const top    = parseInt(comp[1]);
+          const width  = parseInt(comp[2]);
+          const height = parseInt(comp[3]);
+
+          if(!isNaN(left) && !isNaN(top) && !isNaN(width) && !isNaN(height)) {
+            rect = { left, top, width, height };
+          }
+        } else {
+          const index_option = parseInt(clean_option.replace(" ", ""));
+          if(!isNaN(index_option) && index_option < images.length) {
+            const metadata = images[index_option].__metadata__;
+            rect = { left: 0, top: 0, width: metadata.width, height: metadata.height };
+          }
+        }
+
+      if(rect == null) {
+        console.error("Invalid crop option:", Options.crop);
+        process.exit(1);
+      }
+    }
+
+    images = await _cropImages(
+      images,
+      rect
+    );
+    await _loadAndSetMetadata(images);
+  }
+
+
+
+  // console.log("Biggest rect:", biggestRect.width, "", biggestRect.height);
+
+
   // calculate the size of the sprite sheet.
-  const rowsCols = Math.trunc(Math.sqrt(filenames.length + 1));
-  const spriteSheetWidth  = (baseMetadata.width  * rowsCols);
-  const spriteSheetHeight = (baseMetadata.height * rowsCols);
+  const rowsCols          = Math.trunc(Math.sqrt(images.length + 1));
+  const spriteSheetWidth  = (biggestRect.width  * rowsCols);
+  const spriteSheetHeight = (biggestRect.height * rowsCols);
 
   // Create the SpriteSheet image.
   const baseImage = sharp({
@@ -207,10 +354,21 @@ async function _createSpriteSheet(filenames) {
     }
   });
 
-  const compositeOptions = filenames.map((filename, index) => ({
-    input: filename,
-    left: Math.trunc(index % rowsCols) * baseMetadata.width,
-    top:  Math.trunc(index / rowsCols) * baseMetadata.height
+  const compositeOptions = await Promise.all(images.map(async (image, index) => {
+    const metadata = image.__metadata__;
+
+    let x = Math.trunc(index % rowsCols) * biggestRect.width;
+    let y = Math.trunc(index / rowsCols) * biggestRect.height;
+
+    // Center the image on the drawable area.
+    x += Math.round(biggestRect.width  * 0.5 - metadata.width  * 0.5);
+    y += Math.round(biggestRect.height * 0.5 - metadata.height * 0.5);
+
+    return {
+      input: await image.toBuffer(),
+      left: x,
+      top:  y
+    };
   }));
 
   baseImage
