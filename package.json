@@ -1,0 +1,15 @@
+{
+  "name": "simple-sprite-sheet",
+  "version": "1.0.0",
+  "description": "A simple sprite sheet generator",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "mateus.digital <hello@mateus.digital>",
+  "license": "GPLv3",
+  "dependencies": {
+    "sharp": "^0.33.2",
+    "yargs": "^17.7.2"
+  }
+}
