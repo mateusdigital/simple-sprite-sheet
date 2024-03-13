@@ -73,7 +73,8 @@ if (isInDebugMode()) {
     inputPath: path.join(process.cwd(), "images"),
     outputPath: path.join(process.cwd(), "spriteSheet.png"),
     trim: true,
-    crop: true
+    crop: "smallest",
+    scale: 0.3
   }
 
 } else {
@@ -115,10 +116,14 @@ function handleCommandLineOptions() {
       type: 'boolean'
     })
 
-
     .option('crop', {
       describe: 'Crop the input images',
       type: 'string'
+    })
+
+    .option('scale', {
+      describe: 'Scale the output',
+      type: 'number'
     })
 
     .example(`${PROGRAM_NAME} --input-path images --output-path spriteSheet.png`, '')
@@ -157,6 +162,7 @@ function handleCommandLineOptions() {
     outputPath: outputPath,
     trim:       options.argv.trim,
     crop:       options.argv.crop,
+    scale:      options.argv.scale
   }
 }
 
@@ -231,7 +237,6 @@ async function _cropImages(images, rect)
 
   for (let image of images) {
     const metadata = image.__metadata__;
-    console.log(metadata);
     if(rect.width * rect.height > metadata.width * metadata.height) {
       _cropImages.push(image.clone());
     } else {
@@ -284,7 +289,16 @@ async function _findBoundingRects(images)
 
 // -----------------------------------------------------------------------------
 async function _createSpriteSheet(filenames) {
+
+  //
+  // Load
+  //
+
   let images = await _loadImages(filenames);
+
+  //
+  // Trim
+  //
 
   if(Options.trim) {
     images = await _trimImages(images);
@@ -292,6 +306,10 @@ async function _createSpriteSheet(filenames) {
 
   await _loadAndSetMetadata(images);
   const {smallestRect, biggestRect} = await _findBoundingRects(images);
+
+  //
+  // Crop
+  //
 
   if(Options.crop)
   {
@@ -334,10 +352,9 @@ async function _createSpriteSheet(filenames) {
     await _loadAndSetMetadata(images);
   }
 
-
-
-  // console.log("Biggest rect:", biggestRect.width, "", biggestRect.height);
-
+  //
+  // Process
+  //
 
   // calculate the size of the sprite sheet.
   const rowsCols          = Math.trunc(Math.sqrt(images.length + 1));
@@ -371,13 +388,32 @@ async function _createSpriteSheet(filenames) {
     };
   }));
 
-  baseImage
-    .composite(compositeOptions)
-    .toFile(Options.outputPath, (err, info) => {
-      if (err) {
-        console.error("Error generating sprite sheet", err);
-      } else {
-        console.log("Sprite sheet generated:", info);
+  try {
+    // Generate the output buffer
+    await baseImage.composite(compositeOptions).toFile(Options.outputPath);
+
+    // Scale the output if specified
+    if (Options.scale) {
+      let safe_float = parseFloat(Options.scale);
+      if (isNaN(safe_float) || safe_float <= 0.0) {
+        throw new Error("Invalid scale");
       }
-    });
+      if (safe_float > 1.0) {
+        safe_float /= 10;
+      }
+
+      const width = Math.round(spriteSheetWidth * safe_float);
+      const height = Math.round(spriteSheetHeight * safe_float);
+
+      await sharp(Options.outputPath)
+        .resize(width, height, { fit: 'inside' })
+        .toFile(Options.outputPath + "-resized");
+
+      fs.renameSync(Options.outputPath + "-resized", Options.outputPath);
+    }
+
+    console.log("Sprite sheet generated:", Options.outputPath);
+  } catch (err) {
+    console.error("Error generating sprite sheet:", err.message);
+  }
 }
