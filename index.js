@@ -357,7 +357,7 @@ async function _createSpriteSheet(filenames) {
   //
 
   // calculate the size of the sprite sheet.
-  const rowsCols          = Math.trunc(Math.sqrt(images.length + 1));
+  const rowsCols          = Math.ceil(Math.sqrt(images.length + 1));
   const spriteSheetWidth  = (biggestRect.width  * rowsCols);
   const spriteSheetHeight = (biggestRect.height * rowsCols);
 
@@ -413,6 +413,7 @@ async function _createSpriteSheet(filenames) {
     }
 
     console.log("Sprite sheet generated:", Options.outputPath);
+    console.log(`Rows: ${rowsCols} Cols: ${rowsCols} Frames: ${images.length}`);
   } catch (err) {
     console.error("Error generating sprite sheet:", err.message);
   }
